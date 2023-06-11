@@ -20,9 +20,95 @@ uint32_t  SCREEN_WIDTH, SCREEN_HEIGHT;
 
 char *SCREEN_PIXELS;
 
+void char_swap(char *a, char *b) {
+    char t;
+    t = *a;
+    *a = *b;
+    *b = t;
+}
+
+float *load_pfm(const char *fname, int *width, int *height) {
+    FILE *fp;
+    char buf[1024];
+    int byteorder;
+    uint32_t size;
+    float *rgb;
+
+    fp = fopen (fname, "r");
+    if (!fp) {
+        fprintf (stderr, "Failed to open '%s'\n", fname); 
+        exit (-1);
+    }
+
+    if (!fgets(buf, 1000, fp)) {
+        fprintf (stderr, "Failed to read first line from '%s'\n", fname);
+        exit (-1);
+    }
+
+    if (strnstr(buf, "PF4", 1000) != buf) {
+        fprintf(stderr, "Read '%s' as header instead of 'PF4'\n", buf);
+        exit (-1);
+    }
+
+    if (fscanf (fp, "%d %d\n%d\n", width, height, &byteorder) != 3) {
+        fprintf (stderr, "Failed to read width, height, byteorder from '%s'\n", fname);
+        exit (-1);
+    }
+
+    if (byteorder != -1) {
+        fprintf (stderr, "Unsupported byteorder %d\n", byteorder);
+        exit (-1);
+    }
+
+    size = 3 * *width * *height;
+
+    rgb = (float *) malloc (sizeof(float) * size);
+    if (!rgb) {
+        fprintf (stderr, "Failed to allocate memory for image buffer\n");
+        exit (-1);
+    }
+    size_t n;
+    n = fread (rgb, sizeof(float), size, fp);
+
+    if (n != size) {
+        fprintf (stderr, "Failed to read image data %ld != %ld\n", n, size);
+        exit (-1);
+    }
+/*
+    for (int i=0; i<size; i++) {
+        char *c = &rgb[i];
+    
+        char_swap(&c[0], &c[3]);
+        char_swap(&c[1], &c[2]);
+    }
+*/
+
+    printf ("%6.4f\n", rgb[0]);
+
+    unsigned char *c = (char *) rgb;
+
+    for (int i=0; i<16; i++) {
+        printf ("%02x ", c[i]);
+    }
+    printf ("\n");
+
+    return (rgb);
+}
+
+void float_to_char_image (float *rgb_f, int width, int height, char *rgb_c) {
+    int i;
+
+    for (i=0; i<width * height * 3; i++) {
+        float x;
+        x = rgb_f[i] * 255.0;
+        if (x<0) x = 0;
+        if (x>255) x=255;
+        rgb_c[i] = (char) x;
+    }
+}
+
 void init_screen(void) {
     init_texture_for_pixels(SCREEN_TEXTURE_ID);
-    SCREEN_PIXELS = (char *) calloc (sizeof(char), SCREEN_WIDTH * SCREEN_HEIGHT * 3);
 }
 
 
@@ -86,12 +172,24 @@ void	render_scene(void)
 
 int main(int argc, char **argv)
 {  
+    int width, height, i;
+    float *rgb = 0;
 
-	init_gl (argc, argv);
 
-	init_screen ();
+    init_gl (argc, argv);
+    init_screen ();
+
+    rgb = load_pfm("test.pfm", &width, &height);
+
+    SCREEN_WIDTH = width;
+    SCREEN_HEIGHT = height;
+
+    SCREEN_PIXELS = (char *) calloc (sizeof(char), SCREEN_WIDTH * SCREEN_HEIGHT * 3);
+
+    float_to_char_image (rgb, width, height, SCREEN_PIXELS);
+    
   
-	glutMainLoop();  
+    glutMainLoop();  
 
-	return (1);
+    return (1);
 }

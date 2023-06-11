@@ -570,7 +570,7 @@ void draw_pixels_to_texture (char *pixels, int w, int h, int tex_id) {
 
 void init_gl(int argc, char **argv)
 {
-	int	Width = 2048;
+	int	Width = 1024;
 	int Height = 1024;
 
 	glutInit(&argc, argv);
