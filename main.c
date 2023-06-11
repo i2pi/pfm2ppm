@@ -16,9 +16,28 @@
 
 #define SCREEN_TEXTURE_ID	1
 
+#define CHANNELS 3
+
+#define HIST_BINS 1024
+
 uint32_t  SCREEN_WIDTH, SCREEN_HEIGHT;
 
 char *SCREEN_PIXELS;
+
+typedef struct {
+    float   min;
+    float   max;
+    float   histogram[HIST_BINS];
+} statsT;
+
+typedef struct imageT {
+    float       *rgb;
+    int         width;
+    int         height;
+    statsT      stats[CHANNELS];
+} imageT;
+
+imageT  image;
 
 void char_swap(char *a, char *b) {
     char t;
@@ -27,12 +46,56 @@ void char_swap(char *a, char *b) {
     *b = t;
 }
 
-float *load_pfm(const char *fname, int *width, int *height) {
+void reset_stats(statsT *s) {
+    int i;
+
+    s->min = s->max = 0.0f;
+    for (i=0; i<HIST_BINS; i++) s->histogram[i] = 0.0;
+}
+
+void update_stats(statsT *s, float val) {
+    if (val < s->min) s->min = val;
+    if (val > s->max) s->max = val;
+}
+
+void calc_stats (imageT *img) {
+    uint32_t i, pixels;
+    uint32_t    max_bin_count[CHANNELS];
+
+    pixels = img->width * img->height;
+
+    for (i=0; i<CHANNELS; i++) {
+        reset_stats(&img->stats[i]);
+        max_bin_count[i] = 0;
+    }
+
+    for (i=0; i<CHANNELS*pixels; i++) {
+        update_stats(&img->stats[i % CHANNELS], img->rgb[i]);
+    }
+
+    for (i=0; i<CHANNELS*pixels; i++) {
+        int ch = i%CHANNELS;
+        statsT *s = &img->stats[ch];
+        int bin = ((HIST_BINS-1) * (img->rgb[i] - s->min)) / (s->max - s->min);
+        s->histogram[bin]++;
+        if (s->histogram[bin] > max_bin_count[ch]) max_bin_count[ch] = s->histogram[bin];
+    }
+
+    for (int ch=0; ch<CHANNELS; ch++) 
+    for (i=0; i<HIST_BINS; i++) {
+        img->stats[ch].histogram[i] /= (float) max_bin_count[ch];
+    }
+
+    for (i=0; i<CHANNELS; i++) {
+        printf ("%d: %6.4f --> %6.4f\n", i, img->stats[i].min, img->stats[i].max);
+    }
+}
+
+void load_pfm(const char *fname, imageT *img) {
     FILE *fp;
     char buf[1024];
     int byteorder;
     uint32_t size;
-    float *rgb;
 
     fp = fopen (fname, "r");
     if (!fp) {
@@ -50,7 +113,7 @@ float *load_pfm(const char *fname, int *width, int *height) {
         exit (-1);
     }
 
-    if (fscanf (fp, "%d %d\n%d\n", width, height, &byteorder) != 3) {
+    if (fscanf (fp, "%d %d\n%d\n", &img->width, &img->height, &byteorder) != 3) {
         fprintf (stderr, "Failed to read width, height, byteorder from '%s'\n", fname);
         exit (-1);
     }
@@ -60,18 +123,18 @@ float *load_pfm(const char *fname, int *width, int *height) {
         exit (-1);
     }
 
-    size = 3 * *width * *height;
+    size = CHANNELS * img->width * img->height;
 
-    rgb = (float *) malloc (sizeof(float) * size);
-    if (!rgb) {
+    img->rgb = (float *) malloc (sizeof(float) * size);
+    if (!img->rgb) {
         fprintf (stderr, "Failed to allocate memory for image buffer\n");
         exit (-1);
     }
-    size_t n;
-    n = fread (rgb, sizeof(float), size, fp);
+    uint32_t n;
+    n = fread (img->rgb, sizeof(float), size, fp);
 
     if (n != size) {
-        fprintf (stderr, "Failed to read image data %ld != %ld\n", n, size);
+        fprintf (stderr, "Failed to read image data %u!= %u\n", n, size);
         exit (-1);
     }
 /*
@@ -83,24 +146,15 @@ float *load_pfm(const char *fname, int *width, int *height) {
     }
 */
 
-    printf ("%6.4f\n", rgb[0]);
-
-    unsigned char *c = (char *) rgb;
-
-    for (int i=0; i<16; i++) {
-        printf ("%02x ", c[i]);
-    }
-    printf ("\n");
-
-    return (rgb);
+    calc_stats(img);
 }
 
-void float_to_char_image (float *rgb_f, int width, int height, char *rgb_c) {
+void float_to_char_image (imageT *img, char *rgb_c) {
     int i;
 
-    for (i=0; i<width * height * 3; i++) {
+    for (i=0; i<img->width * img->height * 3; i++) {
         float x;
-        x = rgb_f[i] * 255.0;
+        x = img->rgb[i] * 255.0;
         if (x<0) x = 0;
         if (x>255) x=255;
         rgb_c[i] = (char) x;
@@ -109,6 +163,30 @@ void float_to_char_image (float *rgb_f, int width, int height, char *rgb_c) {
 
 void init_screen(void) {
     init_texture_for_pixels(SCREEN_TEXTURE_ID);
+}
+
+void show_histograms(imageT *img, float x1, float y1, float x2, float y2) {
+    int c, i;
+
+    for (c=0; c<CHANNELS; c++) {
+        glLineWidth(2.0);
+        glBegin(GL_LINE_STRIP);
+        switch (c) {
+            case 0: glColor3f(10,0,0); break;
+            case 1: glColor3f(0,10,0); break;
+            case 2: glColor3f(0,0,10); break;
+            default: glColor3f(1,1,1);
+        }
+        
+    
+        for (i=0; i<HIST_BINS; i++) {
+            float x = x1 + (x2 - x1) * i / (float) HIST_BINS;
+            float y = y1 + (y2 - y1) * img->stats[c].histogram[i];
+            glVertex2d (x,y);
+        }
+        glEnd();
+    }
+    
 }
 
 
@@ -127,7 +205,7 @@ void	render_scene(void)
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(fov,aspect,0.1f,100.0f);
-	glTranslatef(0,0,-10);
+	glTranslatef(0,0,-2.5);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -138,8 +216,9 @@ void	render_scene(void)
 	glClearDepth(1);				
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+
+    show_histograms(&image, -1, -0.5, 1, 0);
+
 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -166,27 +245,23 @@ void	render_scene(void)
 	glBindTexture(GL_TEXTURE_2D, 0); // Unbind any textures
 	
 	glutSwapBuffers();	
-
 }
 
 
 int main(int argc, char **argv)
 {  
-    int width, height, i;
-    float *rgb = 0;
-
 
     init_gl (argc, argv);
     init_screen ();
 
-    rgb = load_pfm("test.pfm", &width, &height);
+    load_pfm("test.pfm", &image);
 
-    SCREEN_WIDTH = width;
-    SCREEN_HEIGHT = height;
+    SCREEN_WIDTH = image.width;
+    SCREEN_HEIGHT = image.height;
 
     SCREEN_PIXELS = (char *) calloc (sizeof(char), SCREEN_WIDTH * SCREEN_HEIGHT * 3);
 
-    float_to_char_image (rgb, width, height, SCREEN_PIXELS);
+    float_to_char_image (&image, SCREEN_PIXELS);
     
   
     glutMainLoop();  
