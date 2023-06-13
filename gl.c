@@ -224,7 +224,7 @@ void keyPressed(unsigned char key, int x, int y)
       exit(0);                   
     }
 
-	gui_state.last_key = key;
+    gui_state.last_key = key;
 }
 
 unsigned char get_last_key (void) {
@@ -570,8 +570,8 @@ void draw_pixels_to_texture (char *pixels, int w, int h, int tex_id) {
 
 void init_gl(int argc, char **argv)
 {
-	int	Width = 2048;
-	int Height = 1024;
+	int	Width = 1024;
+	int Height = 512;
 
 	glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
@@ -604,50 +604,28 @@ void init_gl(int argc, char **argv)
 	set_camera();
 }
 
-void save_screen (int frame, char *rgb, int width, int height)
+void save_screen (char *fname, char *rgb, int width, int height)
 {
-    static unsigned char *screen = NULL;
     FILE    *fp;
-    char    str[256];
 
-    if (!screen) {
-        screen = (unsigned char *) malloc (sizeof (unsigned char) * width * height * 4);
-    }
-    if (!screen) {
-        fprintf (stderr, "Failed to malloc screen\n");
-        exit (-1);
-    }
-
-    snprintf (str, 250, "frame%08d.ppm", frame);
-    fp = fopen (str, "w");
+    fp = fopen (fname, "w");
     fprintf (fp, "P6\n");
     fprintf (fp, "%d %d 255\n", width, height);
 
-	fwrite (rgb, 1, width*height*3, fp);
+    fwrite (rgb, 1, width*height*3, fp);
 
     fclose (fp);
 }
 
-void save_screen_f (int frame, float *rgb, int width, int height)
+void save_screen_f (char *fname, float *rgb, int width, int height)
 {
-    static unsigned char *screen = NULL;
     FILE    *fp;
-    char    str[256];
 
-    if (!screen) {
-        screen = (unsigned char *) malloc (sizeof (unsigned char) * width * height * 4);
-    }
-    if (!screen) {
-        fprintf (stderr, "Failed to malloc screen\n");
-        exit (-1);
-    }
-
-    snprintf (str, 250, "frame%08d.float", frame);
-    fp = fopen (str, "w");
+    fp = fopen (fname, "w");
     fprintf (fp, "PF4\n");
     fprintf (fp, "%d %d\n-1\n", width, height);
 
-	fwrite (rgb, sizeof(float), width*height*3, fp);
+    fwrite (rgb, sizeof(float), width*height*3, fp);
 
     fclose (fp);
 }
