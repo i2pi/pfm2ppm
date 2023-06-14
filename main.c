@@ -45,6 +45,8 @@ typedef struct {
     float       white_output;
 
     float       mid_input;
+    float       contrast;
+
     float       lower_gamma;
     float       upper_gamma; 
 } correctionT;
@@ -56,6 +58,9 @@ imageT          image, orig_image;
 correctionT     corrections;
 
 float apply_correction_inner (correctionT *c, float x) {
+
+    x = c->contrast * (x - c->mid_input) + c->mid_input;
+
     if (x < c->mid_input) {
         x = powf(x, c->lower_gamma);
     } else {
@@ -82,6 +87,7 @@ void init_corrections(correctionT *c) {
     c->white_output = 1.0;      
 
     c->mid_input = 0.5;
+    c->contrast = 1.0;
     c->lower_gamma = 1.0;       
     c->upper_gamma = 1.0;
 }
@@ -321,9 +327,16 @@ int gui_keys(unsigned char key, correctionT *c) {
         case '-': y--; break;
         case ' ': float_to_char_image (&image, &corrections, SCREEN_PIXELS); break;
         case 's': {
+            char out_fname[2048];
+            snprintf(out_fname, 2047, "%s_BLK:%6.4f-%6.4f_WHT:%6.4f-%6.4f_MID:%6.4f-%6.4f_GAM:%6.4f-%6.4f.ppm", 
+                in_fname, c->black_input, c->black_output,
+                c->white_input, c->white_output,
+                c->mid_input, c->contrast,
+                c->lower_gamma, c->upper_gamma);
             save_screen(out_fname, SCREEN_PIXELS, image.width, image.height);
             printf ("Saved %s\n", out_fname);
         } break;
+        case 'r': init_corrections(c); break;
         default: return (0);
     }
 
@@ -335,12 +348,13 @@ int gui_keys(unsigned char key, correctionT *c) {
         case WHITE: {c->white_input += x; c->white_output += y; } break;
         case UPPER: {c->upper_gamma += y; } break;
         case LOWER: {c->lower_gamma += y; } break;
-        case MIDLE: {c->mid_input += x; } break;
+        case MIDLE: {c->mid_input += x; c->contrast += y; } break;
     }
 
     printf ("BLACK: %6.4f %6.4f\n", c->black_input, c->black_output);
     printf ("WHITE: %6.4f %6.4f\n", c->white_input, c->white_output);
-    printf ("GAMMA: %6.4f %6.4f %6.4f\n", c->lower_gamma, c->mid_input, c->upper_gamma);
+    printf ("MIDDL: %6.4f %6.4f\n", c->mid_input, c->contrast);
+    printf ("GAMMA: %6.4f %6.4f\n", c->lower_gamma, c->upper_gamma);
 
 
     return (1);
@@ -420,8 +434,6 @@ int main(int argc, char **argv)
 
     in_fname = strdup(argv[1]);
 
-    out_fname = (char *) malloc (strlen(in_fname) + 10);
-    snprintf(out_fname, strlen(in_fname)+8, "%s.ppm", in_fname);
 
     load_pfm(in_fname, &orig_image);
     clone_image(&orig_image, &image);
